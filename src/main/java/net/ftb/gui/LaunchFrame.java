@@ -53,8 +53,6 @@ import net.ftb.download.Locations;
 import net.ftb.events.EnableObjectsEvent;
 import net.ftb.gui.dialogs.LoadingDialog;
 import net.ftb.gui.dialogs.ModPackVersionChangeDialog;
-import net.ftb.gui.dialogs.PasswordDialog;
-import net.ftb.gui.dialogs.PlayOfflineDialog;
 import net.ftb.gui.dialogs.ProfileAdderDialog;
 import net.ftb.gui.dialogs.ProfileEditorDialog;
 import net.ftb.gui.panes.*;
@@ -70,7 +68,6 @@ import net.ftb.tools.TextureManager;
 import net.ftb.util.*;
 import net.ftb.util.OSUtils.OS;
 import net.ftb.util.winreg.JavaInfo;
-import net.ftb.workers.LoginWorker;
 import net.ftb.workers.UnreadNewsWorker;
 
 @SuppressWarnings("serial")
@@ -432,13 +429,7 @@ public class LaunchFrame extends JFrame {
             ErrorUtils.tossError(ModPack.getSelectedPack().getDisclaimer());
         }
         if ((mojangData == null || mojangData.isEmpty()) && password.isEmpty()) {
-            PasswordDialog p = new PasswordDialog(this, true);
-            p.setVisible(true);
-            if (tempPass.isEmpty()) {
-                enableObjects();
-                return;
-            }
-            password = tempPass;
+            password = "password";
         }
 
         Logger.logInfo("Logging in...");
@@ -461,53 +452,8 @@ public class LaunchFrame extends JFrame {
         tpInstall.setEnabled(false);
         tpInstallLocation.setEnabled(false);
 
-        LoginWorker loginWorker = new LoginWorker(username, password, mojangData, selectedProfile) {
-            @Override
-            public void done () {
-                String responseStr;
-                try {
-                    responseStr = get();
-                } catch (InterruptedException err) {
-                    Logger.logError("User cancelled login process", err);
-                    enableObjects();
-                    return;
-                } catch (ExecutionException err) {
-                    // Worker should not leak ExecutionExceptions to caller: all Exceptions are handled internally twice
-                    if (err.getCause() instanceof IOException) {
-                        Logger.logError("Error while logging in", err);
-                        PlayOfflineDialog d = new PlayOfflineDialog("mcDown", username, UserManager.getUUID(username), getResp());
-                        d.setVisible(true);
-                    }
-                    enableObjects();
-                    return;
-                }
-
-                RESPONSE = getResp();
-                Logger.logDebug("responseStr: " + responseStr);
-                String uuid = UserManager.getUUID(username);
-                if (responseStr.equals("good")) {
-                    Logger.logInfo("Login complete.");
-                    try {
-                        // save userdata, including new mojangData
-                        Main.getUserManager().write();
-                        Logger.logDebug("user data saved");
-                    } catch (IOException e) {
-                        Logger.logError("logindata saving failed!");
-                    }
-                    runGameUpdater();
-                } else if (uuid != null && !uuid.isEmpty() && RESPONSE != null && responseStr.equals("offline")) {
-                    Logger.logDebug("Asking user for offline mode");
-                    PlayOfflineDialog d = new PlayOfflineDialog("mcDown", username, uuid, RESPONSE);
-                    d.setVisible(true);
-                } else {
-                    Logger.logDebug("Bad responseStr, not starting MC");
-                    enableObjects();
-                    return;
-                }//if user doesn't want offline mode
-                enableObjects();
-            }
-        };
-        loginWorker.execute();
+        runGameUpdater(username);
+        enableObjects();
     }
 
     private Boolean checkVersion (File verFile, ModPack pack) {
@@ -529,7 +475,7 @@ public class LaunchFrame extends JFrame {
     /**
      * checks whether an update is needed, and then starts the update process off
      */
-    private void runGameUpdater () {
+    private void runGameUpdater(String user) {
 
         final String installPath = Settings.getSettings().getInstallPath();
         final ModPack pack = ModPack.getSelectedPack();
@@ -574,7 +520,7 @@ public class LaunchFrame extends JFrame {
         if (pack.getMcVersion().startsWith("1.6") || pack.getMcVersion().startsWith("1.7") || pack.getMcVersion().startsWith("1.8") || pack.getMcVersion().startsWith("14w")) {
             isLegacy = false;
         }
-        MCInstaller.setupNewStyle(installPath, pack, isLegacy, RESPONSE);
+        MCInstaller.setupNewStyle(installPath, pack, isLegacy, user);
     }
 
 
